@@ -2,7 +2,7 @@
 #property link      "https://github.com/masomnajafpour-oss"
 #property version   "1.00"
 #property strict
-#property indicator_chart_window
+#property indicator_separate_window
 #property indicator_buffers 2
 #property indicator_plots   2
 
@@ -67,10 +67,11 @@ int OnInit() {
     SetIndexBuffer(0, rsiRedBuffer, INDICATOR_DATA);
     SetIndexBuffer(1, rsiBluBuffer, INDICATOR_DATA);
     
-    PlotIndexSetDouble(0, PLOT_EMPTY_VALUE, EMPTY_VALUE);
-    PlotIndexSetDouble(1, PLOT_EMPTY_VALUE, EMPTY_VALUE);
+    ArraySetAsSeries(rsiRedBuffer, true);
+    ArraySetAsSeries(rsiBluBuffer, true);
     
     IndicatorSetString(INDICATOR_SHORTNAME, "Divergence Indicator V1.0");
+    IndicatorSetInteger(INDICATOR_DIGITS, 2);
     
     return INIT_SUCCEEDED;
 }
@@ -86,16 +87,18 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[]) {
     
-    ArraySetAsSeries(rsiRedBuffer, true);
-    ArraySetAsSeries(rsiBluBuffer, true);
+    // Set arrays as series
     ArraySetAsSeries(time, true);
     ArraySetAsSeries(open, true);
     ArraySetAsSeries(high, true);
     ArraySetAsSeries(low, true);
     ArraySetAsSeries(close, true);
     
-    // Calculate RSI values
-    for (int i = prev_calculated; i < rates_total; i++) {
+    // Calculate RSI values for new bars
+    int startIdx = prev_calculated;
+    if (startIdx < RSI_Period) startIdx = RSI_Period;
+    
+    for (int i = startIdx; i < rates_total; i++) {
         rsiRedBuffer[i] = CalculateRSI(low, i, RSI_Period, rates_total);
         rsiBluBuffer[i] = CalculateRSI(high, i, RSI_Period, rates_total);
     }
@@ -103,19 +106,19 @@ int OnCalculate(const int rates_total,
     // Check for signals on the latest bar
     int lastBar = 0;
     
-    // Check for bullish candle patterns (Pin Bar or Engulfing)
-    if (Enable_PinBar || Enable_Engulfing) {
+    // Check for bullish candle patterns
+    if ((Enable_PinBar || Enable_Engulfing) && lastBar + 1 < rates_total) {
         if (IsBullishPattern(open, high, low, close, lastBar, PinBarRatio)) {
-            CheckDoubleBullish(low, high, close, lastBar, rates_total, time);
-            CheckBearishThenHiddenBullish(low, high, close, lastBar, rates_total, time);
+            if (Enable_DoubleBullish) CheckDoubleBullish(low, high, close, lastBar, rates_total, time);
+            if (Enable_BearishThenHiddenBullish) CheckBearishThenHiddenBullish(low, high, close, lastBar, rates_total, time);
         }
     }
     
-    // Check for bearish candle patterns (Pin Bar or Engulfing)
-    if (Enable_PinBar || Enable_Engulfing) {
+    // Check for bearish candle patterns
+    if ((Enable_PinBar || Enable_Engulfing) && lastBar + 1 < rates_total) {
         if (IsBearishPattern(open, high, low, close, lastBar, PinBarRatio)) {
-            CheckDoubleBearish(low, high, close, lastBar, rates_total, time);
-            CheckBullishThenHiddenBearish(low, high, close, lastBar, rates_total, time);
+            if (Enable_DoubleBearish) CheckDoubleBearish(low, high, close, lastBar, rates_total, time);
+            if (Enable_BullishThenHiddenBearish) CheckBullishThenHiddenBearish(low, high, close, lastBar, rates_total, time);
         }
     }
     
@@ -132,14 +135,9 @@ double CalculateRSI(const double &price[], int index, int period, int rates_tota
     double gain = 0.0, loss = 0.0;
     
     for (int i = 1; i <= period; i++) {
-        int currentIdx = index - i + 1;
-        int prevIdx = index - i;
-        
-        if (currentIdx < rates_total && prevIdx < rates_total && currentIdx >= 0 && prevIdx >= 0) {
-            double diff = price[currentIdx] - price[prevIdx];
-            if (diff > 0) gain += diff;
-            else loss -= diff;
-        }
+        double diff = price[index - i + 1] - price[index - i];
+        if (diff > 0) gain += diff;
+        else loss -= diff;
     }
     
     double avgGain = gain / period;
@@ -157,7 +155,6 @@ bool IsBullishPattern(const double &open[], const double &high[], const double &
     if (index + 1 >= ArraySize(open)) return false;
     
     double body = MathAbs(close[index] - open[index]);
-    double range = high[index] - low[index];
     
     if (body < 0.00001) return false;
     
@@ -167,7 +164,6 @@ bool IsBullishPattern(const double &open[], const double &high[], const double &
     // Pin Bar
     if (Enable_PinBar) {
         if (wickLow > body * pinBarRatio && wickHigh < body * 0.5) {
-            // Close in upper third
             if (close[index] > open[index] + body * 0.667) {
                 return true;
             }
@@ -176,10 +172,8 @@ bool IsBullishPattern(const double &open[], const double &high[], const double &
     
     // Engulfing
     if (Enable_Engulfing) {
-        if (index + 1 < ArraySize(open)) {
-            if (close[index] > high[index + 1] && open[index] < low[index + 1]) {
-                return true;
-            }
+        if (close[index] > high[index + 1] && open[index] < low[index + 1]) {
+            return true;
         }
     }
     
@@ -200,7 +194,6 @@ bool IsBearishPattern(const double &open[], const double &high[], const double &
     // Pin Bar
     if (Enable_PinBar) {
         if (wickHigh > body * pinBarRatio && wickLow < body * 0.5) {
-            // Close in lower third
             if (close[index] < open[index] - body * 0.667) {
                 return true;
             }
@@ -209,10 +202,8 @@ bool IsBearishPattern(const double &open[], const double &high[], const double &
     
     // Engulfing
     if (Enable_Engulfing) {
-        if (index + 1 < ArraySize(open)) {
-            if (close[index] < low[index + 1] && open[index] > high[index + 1]) {
-                return true;
-            }
+        if (close[index] < low[index + 1] && open[index] > high[index + 1]) {
+            return true;
         }
     }
     
@@ -224,10 +215,8 @@ bool IsBearishPattern(const double &open[], const double &high[], const double &
 // 1. Double Bullish Divergence (Buy)
 void CheckDoubleBullish(const double &low[], const double &high[], const double &close[],
                         int signalBar, int rates_total, const datetime &time[]) {
-    if (!Enable_DoubleBullish) return;
     
     struct Pivot { int bar; double rsiRed; double priceLow; };
-    
     Pivot pivot3, pivot2, pivot1;
     pivot3.bar = -1;
     pivot2.bar = -1;
@@ -248,60 +237,42 @@ void CheckDoubleBullish(const double &low[], const double &high[], const double 
     
     if (pivot3.bar == -1 || pivot3.rsiRed >= Oversold) return;
     
-    // Find Pivot 2 and Pivot 1
-    int searchStart = pivot3.bar + 1;
+    // Search for Pivot 2 and Pivot 1
+    bool foundDiv = false;
     
-    bool foundDivergence = false;
-    
-    for (int i = searchStart; i <= searchEnd && i < rates_total; i++) {
+    for (int i = pivot3.bar + 1; i <= searchEnd && i < rates_total && !foundDiv; i++) {
         if (rsiRedBuffer[i] > pivot3.rsiRed && low[i] < pivot3.priceLow) {
-            // Potential Pivot 2 found
             pivot2.bar = i;
             pivot2.rsiRed = rsiRedBuffer[i];
             pivot2.priceLow = low[i];
             
             // Now find Pivot 1
-            for (int j = i + 1; j <= searchEnd && j < rates_total; j++) {
+            for (int j = i + 1; j <= searchEnd && j < rates_total && !foundDiv; j++) {
                 if (rsiRedBuffer[j] > pivot2.rsiRed && low[j] < pivot2.priceLow) {
                     pivot1.bar = j;
                     pivot1.rsiRed = rsiRedBuffer[j];
                     pivot1.priceLow = low[j];
                     
-                    // Validate filters
                     if (pivot1.rsiRed < Oversold) {
-                        // Check no lower RSI between pivots
+                        // Validate
                         bool valid = true;
                         
-                        // Check between Pivot 1 and 2
-                        for (int k = pivot1.bar - 1; k > pivot2.bar; k--) {
-                            if (rsiRedBuffer[k] < pivot2.rsiRed) {
-                                valid = false;
-                                break;
-                            }
+                        for (int k = pivot1.bar - 1; k > pivot2.bar && valid; k--) {
+                            if (rsiRedBuffer[k] < pivot2.rsiRed) valid = false;
                         }
                         
-                        // Check between Pivot 2 and 3
-                        if (valid) {
-                            for (int k = pivot2.bar - 1; k > pivot3.bar; k--) {
-                                if (rsiRedBuffer[k] < pivot3.rsiRed) {
-                                    valid = false;
-                                    break;
-                                }
-                            }
+                        for (int k = pivot2.bar - 1; k > pivot3.bar && valid; k--) {
+                            if (rsiRedBuffer[k] < pivot3.rsiRed) valid = false;
                         }
                         
                         if (valid && CanDrawSignal(signalBar, 1)) {
-                            // Signal confirmed
-                            DrawSignal(signalBar, 1, time, low, "Buy Signal - Double Bullish");
+                            DrawSignal(signalBar, 1, time, low, "Buy - Double Bullish");
                             DrawDivergenceLines(pivot1.bar, pivot2.bar, pivot3.bar, 1);
-                            foundDivergence = true;
-                            break;
+                            foundDiv = true;
                         }
                     }
                 }
             }
-            
-            if (foundDivergence) break;
         }
     }
 }
@@ -309,10 +280,8 @@ void CheckDoubleBullish(const double &low[], const double &high[], const double 
 // 2. Double Bearish Divergence (Sell)
 void CheckDoubleBearish(const double &low[], const double &high[], const double &close[],
                         int signalBar, int rates_total, const datetime &time[]) {
-    if (!Enable_DoubleBearish) return;
     
     struct Pivot { int bar; double rsiBlue; double priceHigh; };
-    
     Pivot pivot3, pivot2, pivot1;
     pivot3.bar = -1;
     pivot2.bar = -1;
@@ -333,60 +302,42 @@ void CheckDoubleBearish(const double &low[], const double &high[], const double 
     
     if (pivot3.bar == -1 || pivot3.rsiBlue <= Overbought) return;
     
-    // Find Pivot 2 and Pivot 1
-    int searchStart = pivot3.bar + 1;
+    // Search for Pivot 2 and Pivot 1
+    bool foundDiv = false;
     
-    bool foundDivergence = false;
-    
-    for (int i = searchStart; i <= searchEnd && i < rates_total; i++) {
+    for (int i = pivot3.bar + 1; i <= searchEnd && i < rates_total && !foundDiv; i++) {
         if (rsiBluBuffer[i] < pivot3.rsiBlue && high[i] > pivot3.priceHigh) {
-            // Potential Pivot 2 found
             pivot2.bar = i;
             pivot2.rsiBlue = rsiBluBuffer[i];
             pivot2.priceHigh = high[i];
             
             // Now find Pivot 1
-            for (int j = i + 1; j <= searchEnd && j < rates_total; j++) {
+            for (int j = i + 1; j <= searchEnd && j < rates_total && !foundDiv; j++) {
                 if (rsiBluBuffer[j] < pivot2.rsiBlue && high[j] > pivot2.priceHigh) {
                     pivot1.bar = j;
                     pivot1.rsiBlue = rsiBluBuffer[j];
                     pivot1.priceHigh = high[j];
                     
-                    // Validate filters
                     if (pivot1.rsiBlue > Overbought) {
-                        // Check no higher RSI between pivots
+                        // Validate
                         bool valid = true;
                         
-                        // Check between Pivot 1 and 2
-                        for (int k = pivot1.bar - 1; k > pivot2.bar; k--) {
-                            if (rsiBluBuffer[k] > pivot2.rsiBlue) {
-                                valid = false;
-                                break;
-                            }
+                        for (int k = pivot1.bar - 1; k > pivot2.bar && valid; k--) {
+                            if (rsiBluBuffer[k] > pivot2.rsiBlue) valid = false;
                         }
                         
-                        // Check between Pivot 2 and 3
-                        if (valid) {
-                            for (int k = pivot2.bar - 1; k > pivot3.bar; k--) {
-                                if (rsiBluBuffer[k] > pivot3.rsiBlue) {
-                                    valid = false;
-                                    break;
-                                }
-                            }
+                        for (int k = pivot2.bar - 1; k > pivot3.bar && valid; k--) {
+                            if (rsiBluBuffer[k] > pivot3.rsiBlue) valid = false;
                         }
                         
                         if (valid && CanDrawSignal(signalBar, -1)) {
-                            // Signal confirmed
-                            DrawSignal(signalBar, -1, time, high, "Sell Signal - Double Bearish");
+                            DrawSignal(signalBar, -1, time, high, "Sell - Double Bearish");
                             DrawDivergenceLines(pivot1.bar, pivot2.bar, pivot3.bar, -1);
-                            foundDivergence = true;
-                            break;
+                            foundDiv = true;
                         }
                     }
                 }
             }
-            
-            if (foundDivergence) break;
         }
     }
 }
@@ -394,10 +345,8 @@ void CheckDoubleBearish(const double &low[], const double &high[], const double 
 // 3. Bullish then Hidden Bearish Divergence (Sell)
 void CheckBullishThenHiddenBearish(const double &low[], const double &high[], const double &close[],
                                    int signalBar, int rates_total, const datetime &time[]) {
-    if (!Enable_BullishThenHiddenBearish) return;
     
     struct Pivot { int bar; double rsiRed; double rsiBlue; double priceLow; double priceHigh; };
-    
     Pivot pivot1, pivot2, pivot3, pivot4;
     pivot1.bar = -1;
     pivot2.bar = -1;
@@ -407,7 +356,7 @@ void CheckBullishThenHiddenBearish(const double &low[], const double &high[], co
     int searchEnd = signalBar + CycleCandles;
     if (searchEnd >= rates_total) searchEnd = rates_total - 1;
     
-    // Find Pivot 4 (maximum RSI Blue in last PivotStrength candles) - end of hidden bearish
+    // Find Pivot 4 (maximum RSI Blue)
     pivot4.rsiBlue = 0.0;
     for (int i = signalBar; i <= signalBar + PivotStrength && i < rates_total; i++) {
         if (rsiBluBuffer[i] > pivot4.rsiBlue) {
@@ -419,10 +368,8 @@ void CheckBullishThenHiddenBearish(const double &low[], const double &high[], co
     
     if (pivot4.bar == -1) return;
     
-    // Search backwards for Pivot 1 (first RSI Red < 30)
-    int searchStart = pivot4.bar + 1;
-    
-    for (int i = searchStart; i <= searchEnd && i < rates_total; i++) {
+    // Find Pivot 1 (first RSI Red < 30 going back)
+    for (int i = pivot4.bar + 1; i <= searchEnd && i < rates_total; i++) {
         if (rsiRedBuffer[i] < Oversold) {
             pivot1.bar = i;
             pivot1.rsiRed = rsiRedBuffer[i];
@@ -433,8 +380,8 @@ void CheckBullishThenHiddenBearish(const double &low[], const double &high[], co
     
     if (pivot1.bar == -1) return;
     
-    // Find Pivot 2 (first where RSI Red > pivot1.rsiRed)
-    for (int i = pivot1.bar - 1; i >= 0 && (pivot1.bar - i) <= CycleCandles; i--) {
+    // Find Pivot 2
+    for (int i = pivot1.bar - 1; i >= 0; i--) {
         if (rsiRedBuffer[i] > pivot1.rsiRed) {
             pivot2.bar = i;
             pivot2.rsiRed = rsiRedBuffer[i];
@@ -445,7 +392,7 @@ void CheckBullishThenHiddenBearish(const double &low[], const double &high[], co
     
     if (pivot2.bar == -1) return;
     
-    // Check: between Pivot 1 and 2, no RSI Red < pivot2.rsiRed
+    // Validate between P1 and P2
     bool valid = true;
     for (int k = pivot1.bar - 1; k > pivot2.bar; k--) {
         if (rsiRedBuffer[k] < pivot2.rsiRed) {
@@ -456,7 +403,7 @@ void CheckBullishThenHiddenBearish(const double &low[], const double &high[], co
     
     if (!valid) return;
     
-    // Find Pivot 3 (maximum RSI Blue between Pivot 1 and 2)
+    // Find Pivot 3 (max RSI Blue between P1 and P2)
     pivot3.rsiBlue = 0.0;
     for (int i = pivot2.bar; i < pivot1.bar; i++) {
         if (rsiBluBuffer[i] > pivot3.rsiBlue) {
@@ -468,12 +415,11 @@ void CheckBullishThenHiddenBearish(const double &low[], const double &high[], co
     
     if (pivot3.bar == -1) return;
     
-    // Validate: RSI Blue in Pivot 4 > RSI Blue in Pivot 3 AND High in Pivot 4 < High in Pivot 3
+    // Validate: P4 RSI > P3 RSI AND P4 High < P3 High
     if (pivot4.rsiBlue > pivot3.rsiBlue && pivot4.priceHigh < pivot3.priceHigh) {
         if (CanDrawSignal(signalBar, -1)) {
-            DrawSignal(signalBar, -1, time, high, "Sell Signal - Bullish+Hidden Bearish");
-            DrawDivergenceLines(pivot1.bar, pivot2.bar, pivot3.bar, 1); // Bullish part in red
-            DrawDivergenceLines(pivot3.bar, pivot4.bar, pivot4.bar, -1); // Hidden bearish part
+            DrawSignal(signalBar, -1, time, high, "Sell - Bullish+Hidden Bearish");
+            DrawDivergenceLines(pivot1.bar, pivot2.bar, pivot3.bar, 1);
         }
     }
 }
@@ -481,10 +427,8 @@ void CheckBullishThenHiddenBearish(const double &low[], const double &high[], co
 // 4. Bearish then Hidden Bullish Divergence (Buy)
 void CheckBearishThenHiddenBullish(const double &low[], const double &high[], const double &close[],
                                    int signalBar, int rates_total, const datetime &time[]) {
-    if (!Enable_BearishThenHiddenBullish) return;
     
     struct Pivot { int bar; double rsiRed; double rsiBlue; double priceLow; double priceHigh; };
-    
     Pivot pivot1, pivot2, pivot3, pivot4;
     pivot1.bar = -1;
     pivot2.bar = -1;
@@ -494,7 +438,7 @@ void CheckBearishThenHiddenBullish(const double &low[], const double &high[], co
     int searchEnd = signalBar + CycleCandles;
     if (searchEnd >= rates_total) searchEnd = rates_total - 1;
     
-    // Find Pivot 4 (minimum RSI Red in last PivotStrength candles) - end of hidden bullish
+    // Find Pivot 4 (minimum RSI Red)
     pivot4.rsiRed = 100.0;
     for (int i = signalBar; i <= signalBar + PivotStrength && i < rates_total; i++) {
         if (rsiRedBuffer[i] < pivot4.rsiRed) {
@@ -506,10 +450,8 @@ void CheckBearishThenHiddenBullish(const double &low[], const double &high[], co
     
     if (pivot4.bar == -1) return;
     
-    // Search backwards for Pivot 1 (first RSI Blue > 70)
-    int searchStart = pivot4.bar + 1;
-    
-    for (int i = searchStart; i <= searchEnd && i < rates_total; i++) {
+    // Find Pivot 1 (first RSI Blue > 70 going back)
+    for (int i = pivot4.bar + 1; i <= searchEnd && i < rates_total; i++) {
         if (rsiBluBuffer[i] > Overbought) {
             pivot1.bar = i;
             pivot1.rsiBlue = rsiBluBuffer[i];
@@ -520,8 +462,8 @@ void CheckBearishThenHiddenBullish(const double &low[], const double &high[], co
     
     if (pivot1.bar == -1) return;
     
-    // Find Pivot 2 (first where RSI Blue < pivot1.rsiBlue)
-    for (int i = pivot1.bar - 1; i >= 0 && (pivot1.bar - i) <= CycleCandles; i--) {
+    // Find Pivot 2
+    for (int i = pivot1.bar - 1; i >= 0; i--) {
         if (rsiBluBuffer[i] < pivot1.rsiBlue) {
             pivot2.bar = i;
             pivot2.rsiBlue = rsiBluBuffer[i];
@@ -532,7 +474,7 @@ void CheckBearishThenHiddenBullish(const double &low[], const double &high[], co
     
     if (pivot2.bar == -1) return;
     
-    // Check: between Pivot 1 and 2, no RSI Blue > pivot2.rsiBlue
+    // Validate between P1 and P2
     bool valid = true;
     for (int k = pivot1.bar - 1; k > pivot2.bar; k--) {
         if (rsiBluBuffer[k] > pivot2.rsiBlue) {
@@ -543,7 +485,7 @@ void CheckBearishThenHiddenBullish(const double &low[], const double &high[], co
     
     if (!valid) return;
     
-    // Find Pivot 3 (minimum RSI Red between Pivot 1 and 2)
+    // Find Pivot 3 (min RSI Red between P1 and P2)
     pivot3.rsiRed = 100.0;
     for (int i = pivot2.bar; i < pivot1.bar; i++) {
         if (rsiRedBuffer[i] < pivot3.rsiRed) {
@@ -555,12 +497,11 @@ void CheckBearishThenHiddenBullish(const double &low[], const double &high[], co
     
     if (pivot3.bar == -1) return;
     
-    // Validate: RSI Red in Pivot 4 < RSI Red in Pivot 3 AND Low in Pivot 4 > Low in Pivot 3
+    // Validate: P4 RSI < P3 RSI AND P4 Low > P3 Low
     if (pivot4.rsiRed < pivot3.rsiRed && pivot4.priceLow > pivot3.priceLow) {
         if (CanDrawSignal(signalBar, 1)) {
-            DrawSignal(signalBar, 1, time, low, "Buy Signal - Bearish+Hidden Bullish");
-            DrawDivergenceLines(pivot1.bar, pivot2.bar, pivot3.bar, -1); // Bearish part in blue
-            DrawDivergenceLines(pivot3.bar, pivot4.bar, pivot4.bar, 1); // Hidden bullish part
+            DrawSignal(signalBar, 1, time, low, "Buy - Bearish+Hidden Bullish");
+            DrawDivergenceLines(pivot1.bar, pivot2.bar, pivot3.bar, -1);
         }
     }
 }
@@ -574,10 +515,8 @@ bool CanDrawSignal(int bar, int type) {
     int barDiff = bar - lastSignalBar;
     
     if (lastSignal.type == type) {
-        // Same direction
         if (barDiff < Signal_Distance_Ei_Ei1) return false;
     } else {
-        // Different direction - E0 to E1
         if (barDiff < Signal_Distance_E0_E1) return false;
     }
     
@@ -585,59 +524,50 @@ bool CanDrawSignal(int bar, int type) {
 }
 
 void DrawSignal(int bar, int type, const datetime &time[], const double &price[], string description) {
-    // Draw signal
     string arrowName = "Signal_" + IntegerToString(bar) + "_" + IntegerToString(type) + "_" + IntegerToString(GetTickCount());
     
     if (type == 1) {
         // Buy signal - green arrow up
-        ObjectCreate(0, arrowName, OBJ_ARROW_UP, 0, time[bar], price[bar] - 50 * Point());
+        ObjectCreate(0, arrowName, OBJ_ARROW_UP, Symbol(), time[bar], price[bar] - 50 * Point());
         ObjectSetInteger(0, arrowName, OBJPROP_COLOR, clrLime);
         ObjectSetInteger(0, arrowName, OBJPROP_WIDTH, 3);
     } else {
         // Sell signal - red arrow down
-        ObjectCreate(0, arrowName, OBJ_ARROW_DOWN, 0, time[bar], price[bar] + 50 * Point());
+        ObjectCreate(0, arrowName, OBJ_ARROW_DOWN, Symbol(), time[bar], price[bar] + 50 * Point());
         ObjectSetInteger(0, arrowName, OBJPROP_COLOR, clrRed);
         ObjectSetInteger(0, arrowName, OBJPROP_WIDTH, 3);
     }
     
-    // Update last signal
     lastSignal.barIndex = bar;
     lastSignal.type = type;
     lastSignal.time = time[bar];
     lastSignalBar = bar;
     signalInitialized = true;
+    
+    Print(description + " at bar " + IntegerToString(bar));
 }
 
 void DrawDivergenceLines(int p1Bar, int p2Bar, int p3Bar, int type) {
-    // Draw line from P1 to P2
     string line1Name = "DivLine_P1P2_" + IntegerToString(p1Bar) + "_" + IntegerToString(GetTickCount());
+    string line2Name = "DivLine_P2P3_" + IntegerToString(p2Bar) + "_" + IntegerToString(GetTickCount());
     
     if (type == 1) {
-        // Bullish - Red RSI
+        // Bullish - Red RSI (on indicator window)
         ObjectCreate(0, line1Name, OBJ_TREND, 0, iTime(Symbol(), Period(), p1Bar), rsiRedBuffer[p1Bar], 
                      iTime(Symbol(), Period(), p2Bar), rsiRedBuffer[p2Bar]);
+        ObjectCreate(0, line2Name, OBJ_TREND, 0, iTime(Symbol(), Period(), p2Bar), rsiRedBuffer[p2Bar], 
+                     iTime(Symbol(), Period(), p3Bar), rsiRedBuffer[p3Bar]);
     } else {
-        // Bearish - Blue RSI
+        // Bearish - Blue RSI (on indicator window)
         ObjectCreate(0, line1Name, OBJ_TREND, 0, iTime(Symbol(), Period(), p1Bar), rsiBluBuffer[p1Bar], 
                      iTime(Symbol(), Period(), p2Bar), rsiBluBuffer[p2Bar]);
+        ObjectCreate(0, line2Name, OBJ_TREND, 0, iTime(Symbol(), Period(), p2Bar), rsiBluBuffer[p2Bar], 
+                     iTime(Symbol(), Period(), p3Bar), rsiBluBuffer[p3Bar]);
     }
     
     ObjectSetInteger(0, line1Name, OBJPROP_COLOR, clrGray);
     ObjectSetInteger(0, line1Name, OBJPROP_STYLE, STYLE_DASH);
     ObjectSetInteger(0, line1Name, OBJPROP_WIDTH, 1);
-    
-    // Draw line from P2 to P3
-    string line2Name = "DivLine_P2P3_" + IntegerToString(p2Bar) + "_" + IntegerToString(GetTickCount());
-    
-    if (type == 1) {
-        // Bullish - Red RSI
-        ObjectCreate(0, line2Name, OBJ_TREND, 0, iTime(Symbol(), Period(), p2Bar), rsiRedBuffer[p2Bar], 
-                     iTime(Symbol(), Period(), p3Bar), rsiRedBuffer[p3Bar]);
-    } else {
-        // Bearish - Blue RSI
-        ObjectCreate(0, line2Name, OBJ_TREND, 0, iTime(Symbol(), Period(), p2Bar), rsiBluBuffer[p2Bar], 
-                     iTime(Symbol(), Period(), p3Bar), rsiBluBuffer[p3Bar]);
-    }
     
     ObjectSetInteger(0, line2Name, OBJPROP_COLOR, clrGray);
     ObjectSetInteger(0, line2Name, OBJPROP_STYLE, STYLE_DASH);
