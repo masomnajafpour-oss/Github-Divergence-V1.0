@@ -524,7 +524,10 @@ bool CanDrawSignal(int bar, int type) {
 }
 
 void DrawSignal(int bar, int type, const datetime &time[], const double &price[], string description) {
-    string arrowName = "Signal_" + IntegerToString(bar) + "_" + IntegerToString(type) + "_" + IntegerToString(GetTickCount());
+    string barStr = IntegerToString(bar);
+    string typeStr = IntegerToString(type);
+    string tickStr = IntegerToString(GetTickCount());
+    string arrowName = "Signal_" + barStr + "_" + typeStr + "_" + tickStr;
     
     if (type == 1) {
         // Buy signal - green arrow up
@@ -544,12 +547,17 @@ void DrawSignal(int bar, int type, const datetime &time[], const double &price[]
     lastSignalBar = bar;
     signalInitialized = true;
     
-    Print(description + " at bar " + IntegerToString(bar));
+    string barStr2 = IntegerToString(bar);
+    Print(description + " at bar " + barStr2);
 }
 
 void DrawDivergenceLines(int p1Bar, int p2Bar, int p3Bar, int type) {
-    string line1Name = "DivLine_P1P2_" + IntegerToString(p1Bar) + "_" + IntegerToString(GetTickCount());
-    string line2Name = "DivLine_P2P3_" + IntegerToString(p2Bar) + "_" + IntegerToString(GetTickCount());
+    string p1BarStr = IntegerToString(p1Bar);
+    string p2BarStr = IntegerToString(p2Bar);
+    string tickStr = IntegerToString(GetTickCount());
+    
+    string line1Name = "DivLine_P1P2_" + p1BarStr + "_" + tickStr;
+    string line2Name = "DivLine_P2P3_" + p2BarStr + "_" + tickStr;
     
     if (type == 1) {
         // Bullish - Red RSI (on indicator window)
