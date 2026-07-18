@@ -534,13 +534,13 @@ void DrawSignal(int bar, int type, const datetime &time[], const double &price[]
     if (type == 1) {
         // Buy signal - green arrow up
         offsetPrice = price[bar] - 50.0 * _Point;
-        ObjectCreate(0, arrowName, OBJ_ARROW_UP, Symbol(), time[bar], offsetPrice);
+        ObjectCreate(0, arrowName, OBJ_ARROW_UP, 0, time[bar], offsetPrice);
         ObjectSetInteger(0, arrowName, OBJPROP_COLOR, clrLime);
         ObjectSetInteger(0, arrowName, OBJPROP_WIDTH, 3);
     } else {
         // Sell signal - red arrow down
         offsetPrice = price[bar] + 50.0 * _Point;
-        ObjectCreate(0, arrowName, OBJ_ARROW_DOWN, Symbol(), time[bar], offsetPrice);
+        ObjectCreate(0, arrowName, OBJ_ARROW_DOWN, 0, time[bar], offsetPrice);
         ObjectSetInteger(0, arrowName, OBJPROP_COLOR, clrRed);
         ObjectSetInteger(0, arrowName, OBJPROP_WIDTH, 3);
     }
