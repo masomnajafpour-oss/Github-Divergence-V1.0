@@ -529,14 +529,18 @@ void DrawSignal(int bar, int type, const datetime &time[], const double &price[]
     string tickStr = IntegerToString(GetTickCount());
     string arrowName = "Signal_" + barStr + "_" + typeStr + "_" + tickStr;
     
+    double offsetPrice = 0.0;
+    
     if (type == 1) {
         // Buy signal - green arrow up
-        ObjectCreate(0, arrowName, OBJ_ARROW_UP, Symbol(), time[bar], price[bar] - 50 * Point());
+        offsetPrice = price[bar] - 50.0 * _Point;
+        ObjectCreate(0, arrowName, OBJ_ARROW_UP, Symbol(), time[bar], offsetPrice);
         ObjectSetInteger(0, arrowName, OBJPROP_COLOR, clrLime);
         ObjectSetInteger(0, arrowName, OBJPROP_WIDTH, 3);
     } else {
         // Sell signal - red arrow down
-        ObjectCreate(0, arrowName, OBJ_ARROW_DOWN, Symbol(), time[bar], price[bar] + 50 * Point());
+        offsetPrice = price[bar] + 50.0 * _Point;
+        ObjectCreate(0, arrowName, OBJ_ARROW_DOWN, Symbol(), time[bar], offsetPrice);
         ObjectSetInteger(0, arrowName, OBJPROP_COLOR, clrRed);
         ObjectSetInteger(0, arrowName, OBJPROP_WIDTH, 3);
     }
